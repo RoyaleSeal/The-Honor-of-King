@@ -30,20 +30,21 @@
         }
     </script>
     <style>
-        /* 移动端隐藏非游戏内容 */
-        @media (max-width: 768px) {
+        /* 移动端隐藏非游戏内容：小屏竖屏 + 所有横屏（手机横屏宽度常>768px） */
+        @media (max-width: 768px), (orientation: landscape) and (max-height: 500px) {
             #gameInterface header,
             #gameInterface footer {
                 display: none !important;
             }
-            
+
             #gameInterface main {
                 height: 100vh !important;
             }
-            
+
             #gameCanvas {
                 height: 100vh !important;
                 width: 100vw !important;
+                object-fit: cover !important;
             }
         }
         
@@ -390,7 +391,7 @@
         #goldDust { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
 
         /* 让所有屏幕内容浮于背景之上 */
-        body > .overflow-y-auto, #landscapeOverlay { position: relative; z-index: 2; }
+        body > .overflow-y-auto { position: relative; z-index: 2; }
 
         /* —— 华丽游戏面板：多边形金边 + 深玻璃 —— */
         .gt-panel {
