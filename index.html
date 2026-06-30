@@ -38,13 +38,13 @@
             }
 
             #gameInterface main {
-                height: 100vh !important;
+                height: 100% !important;
             }
 
+            /* canvas 填满 container（伪横屏下 100vw/100vh 指向错误尺寸，必须用 100%） */
             #gameCanvas {
-                height: 100vh !important;
-                width: 100vw !important;
-                object-fit: cover !important;
+                width: 100% !important;
+                height: 100% !important;
             }
         }
         
@@ -116,6 +116,23 @@
             font-size: 14px;
             opacity: 0.6;
         }
+
+        /* —— 伪横屏：竖屏时把整个页面旋转90度撑满屏幕 —— */
+        @media (max-aspect-ratio: 1/1) {
+            body.force-landscape {
+                position: fixed !important;
+                top: 0 !important;
+                left: 100vw !important;
+                width: 100vh !important;
+                height: 100vw !important;
+                transform: rotate(90deg) !important;
+                transform-origin: top left !important;
+                overflow: hidden !important;
+                z-index: 1 !important;
+            }
+            /* 伪横屏下隐藏横屏提示遮罩（已旋转，不再需要提示） */
+            body.force-landscape #landscapeOverlay { display: none !important; }
+        }
     </style>
     <script>
         // 检测方向变化并处理横屏提示
@@ -124,8 +141,8 @@
             const skipBtn = document.getElementById('skipLandscapeBtn');
             const statusDiv = document.getElementById('landscapeStatus');
             
-            // 检查是否为移动端：UA 关键词 OR 触屏+小屏（覆盖桌面模式/iPadOS/国产浏览器漏判）
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+            // 检查是否为移动端：UA 关键词(含微信/QQ/小米等国产) OR 触屏+小屏（覆盖 iPadOS/国产浏览器/微信内置漏判）
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|MicroMessenger|MQQBrowser|MQQ\/|MMWEB|MiuiBrowser|HuaweiBrowser|OPR\/|VivoBrowser/i.test(navigator.userAgent)
                 || (('ontouchstart' in window || navigator.maxTouchPoints > 0) && Math.min(window.screen.width, window.screen.height) < 1024);
             
             // 跳过按钮点击
@@ -133,56 +150,35 @@
                 landscapeOverlay.classList.remove('show');
             });
             
-            // 检查当前方向并控制提示显示
+            // 检查当前方向并控制伪横屏
             const checkOrientation = function() {
-                // 只有移动端才显示横屏提示
+                const wasForce = document.body.classList.contains('force-landscape');
+                let shouldForce;
                 if (!isMobile) {
-                    landscapeOverlay.classList.remove('show');
-                    return;
-                }
-                
-                if (window.innerWidth > window.innerHeight) {
-                    // 横屏：隐藏提示
-                    landscapeOverlay.classList.remove('show');
-                    statusDiv.textContent = '已检测到横屏';
+                    shouldForce = false;
                 } else {
-                    // 竖屏：显示提示
-                    landscapeOverlay.classList.add('show');
-                    statusDiv.textContent = '请旋转手机到横屏';
+                    // 竖屏（视口宽<=高）时启用伪横屏
+                    shouldForce = window.innerWidth <= window.innerHeight;
                 }
-            };
-            
-            // 使用陀螺仪检测设备方向
-            const startGyroDetection = function() {
-                if (!isMobile) return;
-                
-                if (window.DeviceOrientationEvent) {
-                    window.addEventListener('deviceorientation', function(event) {
-                        const gamma = event.gamma; // 左右倾斜角度
-                        const beta = event.beta;   // 前后倾斜角度
-                        
-                        // 检测横屏：gamma绝对值大于60度表示手机横放
-                        if (Math.abs(gamma) > 60) {
-                            landscapeOverlay.classList.remove('show');
-                            statusDiv.textContent = '陀螺仪检测到横屏';
-                        } else {
-                            landscapeOverlay.classList.add('show');
-                            statusDiv.textContent = '陀螺仪: 请横屏 (' + Math.round(gamma) + '°)';
-                        }
-                    });
-                    statusDiv.textContent = '陀螺仪检测中...';
-                } else {
-                    statusDiv.textContent = '陀螺仪不可用';
+
+                if (shouldForce && !wasForce) {
+                    // 启用伪横屏
+                    document.body.classList.add('force-landscape');
+                    if (statusDiv) statusDiv.textContent = '已强制横屏显示';
+                    // body 变化不会自动触发 resize，手动触发让 Game.resizeCanvas 更新画布
+                    setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
+                } else if (!shouldForce && wasForce) {
+                    // 取消伪横屏
+                    document.body.classList.remove('force-landscape');
+                    if (statusDiv) statusDiv.textContent = '已检测到横屏';
+                    setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
                 }
             };
             
             // 初始检查
             checkOrientation();
             
-            // 启动陀螺仪检测
-            startGyroDetection();
-            
-            // 监听方向变化
+            // 监听方向变化（resize 已能覆盖 orientationchange，但保留以兼容旧设备）
             window.addEventListener('orientationchange', checkOrientation);
             window.addEventListener('resize', checkOrientation);
         });
@@ -967,7 +963,7 @@
         <main class="flex-1 flex relative overflow-hidden">
             <!-- 游戏画布 -->
             <div class="flex-1 relative flex items-center justify-center overflow-hidden" style="background:radial-gradient(120% 100% at 50% 50%, #2a3358 0%, #0a0e1f 80%);">
-                <canvas id="gameCanvas" class="block" tabindex="0" style="max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: pixelated;"></canvas>
+                <canvas id="gameCanvas" class="block w-full h-full" tabindex="0" style="width:100%; height:100%; image-rendering: pixelated;"></canvas>
 
                 <!-- 游戏状态覆盖层 -->
                 <div id="gameOverlay" class="absolute inset-0 flex items-center justify-center z-10 hidden" style="background:radial-gradient(circle at 50% 50%, rgba(10,14,31,.7), rgba(0,0,0,.9));">
@@ -1014,6 +1010,12 @@
                     <!-- 技能3（大招） - 正北方向，紫色渐变 - 缩小尺寸 -->
                     <div id="skill3Btn" class="gt-skill gt-skill-ult absolute w-14 h-14 flex items-center justify-center text-lg font-bold text-white" style="touch-action: none; cursor: pointer; right: 12px; bottom: 88px;">
                         <span>3</span>
+                    </div>
+
+                    <!-- 李信变身按钮（仅李信时显示）- 位于技能区上方 -->
+                    <div id="morphBtn" class="absolute flex flex-col items-center justify-center w-14 h-14 rounded-full hidden" style="touch-action: none; cursor: pointer; right: 12px; bottom: 156px; border:2px solid rgba(245,210,122,.9); background:radial-gradient(circle at 35% 30%, #fff6d5, #FFD700 50%, #8a5a16); box-shadow:0 0 18px rgba(245,210,122,.5), inset 0 -3px 6px rgba(120,80,20,.5);">
+                        <i class="fa fa-sun-o morph-icon text-lg text-white"></i>
+                        <span class="morph-label text-[10px] font-bold text-white mt-0.5">光</span>
                     </div>
                 </div>
             </div>
@@ -1446,6 +1448,168 @@
                 }
             }
             
+            // 把屏幕坐标转换为 canvas 内部坐标（处理伪横屏旋转）
+            _updateMouseCoord(clientX, clientY) {
+                const rect = this.canvas.getBoundingClientRect();
+                if (document.body.classList.contains('force-landscape')) {
+                    // 伪横屏：canvas 被 rotate(90deg)，反向旋转坐标
+                    // 旋转后 canvas 内部 x = (clientY - rect.top)
+                    //           canvas 内部 y = rect.width - (clientX - rect.left)
+                    this.mouse.x = clientY - rect.top;
+                    this.mouse.y = rect.width - (clientX - rect.left);
+                } else {
+                    this.mouse.x = clientX - rect.left;
+                    this.mouse.y = clientY - rect.top;
+                }
+            }
+
+            // 李信形态切换（右键/F键/移动端变身按钮共用）
+            switchLixinForm() {
+                if (!this.player || this.player.heroType !== 'lixin') return;
+                const now = Date.now();
+
+                // 检查等级，4级后才能切换形态
+                if (this.score.level < 4) {
+                    showFloatingMessage('4级后解锁形态切换', 'orange-400');
+                    return;
+                }
+
+                // 检查形态切换冷却
+                if (now - this.player.lastFormSwitch < this.player.formSwitchCooldown) {
+                    const remainingCooldown = Math.ceil((this.player.formSwitchCooldown - (now - this.player.lastFormSwitch)) / 1000);
+                    showFloatingMessage(`形态切换冷却中: ${remainingCooldown}秒`, 'orange-400');
+                    return;
+                }
+
+                // 切换形态
+                if (this.player.form === 'normal' || this.player.form === 'light') {
+                    // 切换到暗信
+                    this.player.form = 'dark';
+                    this.player.color = '#8B0000'; // 狂暴形态深红色
+                    showFloatingMessage('切换到狂暴形态！', 'red-400');
+                    showFloatingMessage('光与暗的抉择，我选择暗！', 'red-400');
+
+                    // —— 李信「幻彩·万象」传说皮肤：形态切换裂变（七彩棱镜→深渊星璃·完全版）—— //
+                    if (!lxIsClassic()) {
+                    this.effects.push(new LXFormShift(this.player.x, this.player.y, 'dark', 900));
+                    // 深渊星璃·三环粒子潮汐
+                    for (let ring = 0; ring < 3; ring++) {
+                        const count = 16 + ring * 8;
+                        const distance = 80 + ring * 45;
+                        const delayBase = ring * 120;
+                        for (let i = 0; i < count; i++) {
+                            const angle = (i / count) * Math.PI * 2 + ring * 0.3;
+                            const x = this.player.x + Math.cos(angle) * distance;
+                            const y = this.player.y + Math.sin(angle) * distance;
+                            setTimeout(() => {
+                                this.effects.push(new ImpactEffect(x, y, LX.abyss, 1.0));
+                                this.effects.push(new ImpactEffect(x, y, LX.blood, 0.7));
+                                if (ring === 2) this.effects.push(new ImpactEffect(x, y, LX.void, 0.5));
+                            }, delayBase + i * 35);
+                        }
+                    }
+                    // 深渊·八道血璃赤放射光束
+                    for (let i = 0; i < 8; i++) {
+                        const angle = (i / 8) * Math.PI * 2;
+                        setTimeout(() => {
+                            for (let r = 30; r <= 180; r += 25) {
+                                const x = this.player.x + Math.cos(angle) * r;
+                                const y = this.player.y + Math.sin(angle) * r;
+                                this.effects.push(new ImpactEffect(x, y, LX.blood, 0.45));
+                            }
+                        }, 200 + i * 40);
+                    }
+                    // 深渊·倒五芒星神格符号
+                    for (let i = 0; i < 5; i++) {
+                        const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+                        const x = this.player.x + Math.cos(angle) * 90;
+                        const y = this.player.y + Math.sin(angle) * 90;
+                        setTimeout(() => {
+                            this.effects.push(new ImpactEffect(x, y, LX.abyss, 0.9));
+                            this.effects.push(new ImpactEffect(x, y, LX.core, 0.5));
+                        }, 350 + i * 80);
+                    }
+                    }
+                } else if (this.player.form === 'dark') {
+                    // 切换到光信
+                    this.player.form = 'light';
+                    this.player.color = '#FFD700'; // 统御形态金色
+                    showFloatingMessage('切换到统御形态！', 'yellow-400');
+                    showFloatingMessage('光与暗的抉择，我选择光！', 'yellow-400');
+
+                    // —— 李信「幻彩·万象」传说皮肤：形态切换裂变（深渊→七彩棱镜流光·完全版）—— //
+                    if (!lxIsClassic()) {
+                    this.effects.push(new LXFormShift(this.player.x, this.player.y, 'light', 900));
+                    // 七彩棱镜·三环粒子潮汐（轮转色）
+                    for (let ring = 0; ring < 3; ring++) {
+                        const count = 16 + ring * 8;
+                        const distance = 80 + ring * 45;
+                        const delayBase = ring * 120;
+                        for (let i = 0; i < count; i++) {
+                            const angle = (i / count) * Math.PI * 2 + ring * 0.3;
+                            const x = this.player.x + Math.cos(angle) * distance;
+                            const y = this.player.y + Math.sin(angle) * distance;
+                            const rainbowCol = LX.rainbow[(i + ring) % LX.rainbow.length];
+                            setTimeout(() => {
+                                this.effects.push(new ImpactEffect(x, y, rainbowCol, 1.0));
+                                this.effects.push(new ImpactEffect(x, y, LX.core, 0.6));
+                                if (ring === 2) this.effects.push(new ImpactEffect(x, y, LX.gold, 0.5));
+                            }, delayBase + i * 35);
+                        }
+                    }
+                    // 七彩·十二道金辉放射光束
+                    for (let i = 0; i < 12; i++) {
+                        const angle = (i / 12) * Math.PI * 2;
+                        const beamCol = LX.rainbow[i % LX.rainbow.length];
+                        setTimeout(() => {
+                            for (let r = 30; r <= 200; r += 20) {
+                                const x = this.player.x + Math.cos(angle) * r;
+                                const y = this.player.y + Math.sin(angle) * r;
+                                this.effects.push(new ImpactEffect(x, y, beamCol, 0.5));
+                            }
+                        }, 200 + i * 30);
+                    }
+                    // 七彩·七芒星神格符号
+                    for (let i = 0; i < 7; i++) {
+                        const angle = (i / 7) * Math.PI * 2 - Math.PI / 2;
+                        const x = this.player.x + Math.cos(angle) * 95;
+                        const y = this.player.y + Math.sin(angle) * 95;
+                        const starCol = LX.rainbow[i % LX.rainbow.length];
+                        setTimeout(() => {
+                            this.effects.push(new ImpactEffect(x, y, starCol, 1.0));
+                            this.effects.push(new ImpactEffect(x, y, LX.core, 0.7));
+                        }, 350 + i * 60);
+                    }
+                    }
+                }
+
+                // 更新形态切换时间
+                this.player.lastFormSwitch = now;
+
+                // 更新变身按钮显示（反映当前形态）
+                this.updateMorphBtnDisplay();
+            }
+
+            // 更新李信变身按钮的显示（当前形态 + 冷却状态）
+            updateMorphBtnDisplay() {
+                const btn = document.getElementById('morphBtn');
+                if (!btn || !this.player || this.player.heroType !== 'lixin') return;
+                const form = this.player.form;
+                const icon = btn.querySelector('.morph-icon');
+                const label = btn.querySelector('.morph-label');
+                if (form === 'dark') {
+                    btn.style.background = 'radial-gradient(circle at 35% 30%, #5a0e0e, #8B0000 50%, #2a0000)';
+                    btn.style.borderColor = 'rgba(255,80,80,.8)';
+                    if (icon) icon.className = 'fa fa-yin-yang morph-icon';
+                    if (label) label.textContent = '暗';
+                } else {
+                    btn.style.background = 'radial-gradient(circle at 35% 30%, #fff6d5, #FFD700 50%, #8a5a16)';
+                    btn.style.borderColor = 'rgba(245,210,122,.9)';
+                    if (icon) icon.className = 'fa fa-sun-o morph-icon';
+                    if (label) label.textContent = '光';
+                }
+            }
+
             // 调整画布尺寸
             resizeCanvas() {
                 try {
@@ -1453,14 +1617,15 @@
                     if (!container) {
                         throw new Error("找不到画布容器元素");
                     }
-                    
-                    // 获取容器的实际尺寸
-                    const containerRect = container.getBoundingClientRect();
-                    // 使用容器的实际宽高（全屏相机）
-                    this.canvas.width = containerRect.width;
-                    this.canvas.height = containerRect.height;
+
+                    // 使用 offsetWidth/offsetHeight 获取布局尺寸（不受 transform 影响）
+                    // getBoundingClientRect 在伪横屏 rotate(90deg) 下返回视觉尺寸，会导致 canvas 内部分辨率与盒子不匹配
+                    const cw = container.offsetWidth || container.clientWidth;
+                    const ch = container.offsetHeight || container.clientHeight;
+                    this.canvas.width = cw;
+                    this.canvas.height = ch;
                     // 游戏世界尺寸保持正方形（取最小值），确保移动距离一致
-                    this.gameWorldSize = Math.min(containerRect.width, containerRect.height);
+                    this.gameWorldSize = Math.min(cw, ch);
                     
                     // 调整小地图尺寸
                     if (this.miniMapCanvas) {
@@ -1801,6 +1966,11 @@
                                     handleSkillHold(3);
                                 }
                             }
+                        } else if (e.key.toLowerCase() === 'f') {
+                            // F 键：李信形态切换（与右键/移动端变身按钮共用）
+                            if (this.player && this.isRunning && this.player.heroType === 'lixin') {
+                                this.switchLixinForm();
+                            }
                         }
                         
                         // 王京的能量瓶装备系统：数字键1-0装备瓶罐
@@ -1913,136 +2083,16 @@
                 
                 // 鼠标事件
                 this.canvas.addEventListener('mousemove', (e) => {
-                    const rect = this.canvas.getBoundingClientRect();
-                    this.mouse.x = e.clientX - rect.left;
-                    this.mouse.y = e.clientY - rect.top;
+                    this._updateMouseCoord(e.clientX, e.clientY);
                 });
                 
                 this.canvas.addEventListener('mousedown', (e) => {
                     this.mouse.clicked = true;
                     
-                    // 右键形态切换（李信专属）
+                    // 右键形态切换（李信专属）→ 委托给 switchLixinForm
                     if (e.button === 2 && this.player && this.player.heroType === 'lixin') {
                         e.preventDefault(); // 阻止默认右键菜单
-                        const now = Date.now();
-                        
-                        // 检查等级，4级后才能切换形态
-                        if (this.score.level < 4) {
-                            showFloatingMessage('4级后解锁形态切换', 'orange-400');
-                            return;
-                        }
-                        
-                        // 检查形态切换冷却
-                        if (now - this.player.lastFormSwitch < this.player.formSwitchCooldown) {
-                            const remainingCooldown = Math.ceil((this.player.formSwitchCooldown - (now - this.player.lastFormSwitch)) / 1000);
-                            showFloatingMessage(`形态切换冷却中: ${remainingCooldown}秒`, 'orange-400');
-                            return;
-                        }
-                        
-                        // 切换形态
-                        if (this.player.form === 'normal' || this.player.form === 'light') {
-                            // 切换到暗信
-                            this.player.form = 'dark';
-                            this.player.color = '#8B0000'; // 狂暴形态深红色
-                            showFloatingMessage('切换到狂暴形态！', 'red-400');
-                            showFloatingMessage('光与暗的抉择，我选择暗！', 'red-400');
-                            
-                            // —— 李信「幻彩·万象」传说皮肤：形态切换裂变（七彩棱镜→深渊星璃·完全版）—— //
-                            if (!lxIsClassic()) {
-                            this.effects.push(new LXFormShift(this.player.x, this.player.y, 'dark', 900));
-                            // 深渊星璃·三环粒子潮汐
-                            for (let ring = 0; ring < 3; ring++) {
-                                const count = 16 + ring * 8;
-                                const distance = 80 + ring * 45;
-                                const delayBase = ring * 120;
-                                for (let i = 0; i < count; i++) {
-                                    const angle = (i / count) * Math.PI * 2 + ring * 0.3;
-                                    const x = this.player.x + Math.cos(angle) * distance;
-                                    const y = this.player.y + Math.sin(angle) * distance;
-                                    setTimeout(() => {
-                                        this.effects.push(new ImpactEffect(x, y, LX.abyss, 1.0));
-                                        this.effects.push(new ImpactEffect(x, y, LX.blood, 0.7));
-                                        if (ring === 2) this.effects.push(new ImpactEffect(x, y, LX.void, 0.5));
-                                    }, delayBase + i * 35);
-                                }
-                            }
-                            // 深渊·八道血璃赤放射光束
-                            for (let i = 0; i < 8; i++) {
-                                const angle = (i / 8) * Math.PI * 2;
-                                setTimeout(() => {
-                                    for (let r = 30; r <= 180; r += 25) {
-                                        const x = this.player.x + Math.cos(angle) * r;
-                                        const y = this.player.y + Math.sin(angle) * r;
-                                        this.effects.push(new ImpactEffect(x, y, LX.blood, 0.45));
-                                    }
-                                }, 200 + i * 40);
-                            }
-                            // 深渊·倒五芒星神格符号
-                            for (let i = 0; i < 5; i++) {
-                                const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-                                const x = this.player.x + Math.cos(angle) * 90;
-                                const y = this.player.y + Math.sin(angle) * 90;
-                                setTimeout(() => {
-                                    this.effects.push(new ImpactEffect(x, y, LX.abyss, 0.9));
-                                    this.effects.push(new ImpactEffect(x, y, LX.core, 0.5));
-                                }, 350 + i * 80);
-                            }
-                            }
-                        } else if (this.player.form === 'dark') {
-                            // 切换到光信
-                            this.player.form = 'light';
-                            this.player.color = '#FFD700'; // 统御形态金色
-                            showFloatingMessage('切换到统御形态！', 'yellow-400');
-                            showFloatingMessage('光与暗的抉择，我选择光！', 'yellow-400');
-                            
-                            // —— 李信「幻彩·万象」传说皮肤：形态切换裂变（深渊→七彩棱镜流光·完全版）—— //
-                            if (!lxIsClassic()) {
-                            this.effects.push(new LXFormShift(this.player.x, this.player.y, 'light', 900));
-                            // 七彩棱镜·三环粒子潮汐（轮转色）
-                            for (let ring = 0; ring < 3; ring++) {
-                                const count = 16 + ring * 8;
-                                const distance = 80 + ring * 45;
-                                const delayBase = ring * 120;
-                                for (let i = 0; i < count; i++) {
-                                    const angle = (i / count) * Math.PI * 2 + ring * 0.3;
-                                    const x = this.player.x + Math.cos(angle) * distance;
-                                    const y = this.player.y + Math.sin(angle) * distance;
-                                    const rainbowCol = LX.rainbow[(i + ring) % LX.rainbow.length];
-                                    setTimeout(() => {
-                                        this.effects.push(new ImpactEffect(x, y, rainbowCol, 1.0));
-                                        this.effects.push(new ImpactEffect(x, y, LX.core, 0.6));
-                                        if (ring === 2) this.effects.push(new ImpactEffect(x, y, LX.gold, 0.5));
-                                    }, delayBase + i * 35);
-                                }
-                            }
-                            // 七彩·十二道金辉放射光束
-                            for (let i = 0; i < 12; i++) {
-                                const angle = (i / 12) * Math.PI * 2;
-                                const beamCol = LX.rainbow[i % LX.rainbow.length];
-                                setTimeout(() => {
-                                    for (let r = 30; r <= 200; r += 20) {
-                                        const x = this.player.x + Math.cos(angle) * r;
-                                        const y = this.player.y + Math.sin(angle) * r;
-                                        this.effects.push(new ImpactEffect(x, y, beamCol, 0.5));
-                                    }
-                                }, 200 + i * 30);
-                            }
-                            // 七彩·七芒星神格符号
-                            for (let i = 0; i < 7; i++) {
-                                const angle = (i / 7) * Math.PI * 2 - Math.PI / 2;
-                                const x = this.player.x + Math.cos(angle) * 95;
-                                const y = this.player.y + Math.sin(angle) * 95;
-                                const starCol = LX.rainbow[i % LX.rainbow.length];
-                                setTimeout(() => {
-                                    this.effects.push(new ImpactEffect(x, y, starCol, 1.0));
-                                    this.effects.push(new ImpactEffect(x, y, LX.core, 0.7));
-                                }, 350 + i * 60);
-                            }
-                            }
-                        }
-
-                        // 更新形态切换时间
-                        this.player.lastFormSwitch = now;
+                        this.switchLixinForm();
                     }
                     
                     // 马超二技能：放置标枪
@@ -2229,8 +2279,16 @@
                         if (joystickPointerId === null) return;
                         
                         const bounds = getBounds();
-                        const dx = clientX - bounds.centerX;
-                        const dy = clientY - bounds.centerY;
+                        let dx, dy;
+                        if (document.body.classList.contains('force-landscape')) {
+                            // 伪横屏：body 旋转 90deg，把视口坐标转换到 container 内部坐标
+                            // 视口 +y（下）→ container +x（右）；视口 +x（右）→ container -y（上）
+                            dx = clientY - bounds.centerY;
+                            dy = bounds.centerX - clientX;
+                        } else {
+                            dx = clientX - bounds.centerX;
+                            dy = clientY - bounds.centerY;
+                        }
                         const distance = Math.sqrt(dx * dx + dy * dy);
                         const maxDistance = bounds.radius - bounds.stickRadius - 4;
                         
@@ -2292,12 +2350,21 @@
                 // 小摇杆按钮处理
                 const createSmallJoystick = (btn, actionType, actionNum) => {
                     if (!btn) return;
-                    
+
                     const maxDragDistance = 30;
                     let startX = 0, startY = 0;
                     let initialTransform = '';
                     let currentPointerId = null;
-                    
+
+                    // 伪横屏下把视口坐标差值转换为游戏世界/按钮本地坐标
+                    // body rotate(90deg) 顺时针：视口 → 旋转后 (dy, -dx)
+                    const toLocalDelta = (dx, dy) => {
+                        if (document.body.classList.contains('force-landscape')) {
+                            return { dx: dy, dy: -dx };
+                        }
+                        return { dx, dy };
+                    };
+
                     const handleStart = (pointerId, clientX, clientY) => {
                         currentPointerId = pointerId;
                         startX = clientX;
@@ -2306,36 +2373,42 @@
                         btn.style.transition = 'none';
                         btn.setPointerCapture(pointerId);
                     };
-                    
+
                     const handleMove = (clientX, clientY) => {
                         if (currentPointerId === null) return;
-                        
-                        const dx = clientX - startX;
-                        const dy = clientY - startY;
+
+                        // 视口坐标差值
+                        const vdx = clientX - startX;
+                        const vdy = clientY - startY;
+                        // 转换为按钮本地坐标（伪横屏旋转补偿）
+                        const { dx, dy } = toLocalDelta(vdx, vdy);
                         const distance = Math.sqrt(dx * dx + dy * dy);
-                        
+
                         let finalX = dx;
                         let finalY = dy;
-                        
+
                         if (distance > maxDragDistance) {
                             const ratio = maxDragDistance / distance;
                             finalX = dx * ratio;
                             finalY = dy * ratio;
                         }
-                        
+
                         btn.style.transform = `translate(${finalX}px, ${finalY}px)`;
                     };
-                    
+
                     const handleEnd = (clientX, clientY) => {
                         if (currentPointerId === null) return;
-                        
+
                         btn.style.transition = 'transform 0.2s ease';
                         btn.style.transform = initialTransform || 'translate(0, 0)';
-                        
+
                         if (self.player && self.isRunning) {
-                            const dx = clientX - startX;
-                            const dy = clientY - startY;
-                            
+                            // 视口坐标差值
+                            const vdx = clientX - startX;
+                            const vdy = clientY - startY;
+                            // 转换为游戏世界坐标（伪横屏旋转补偿）
+                            const { dx, dy } = toLocalDelta(vdx, vdy);
+
                             if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
                                 self.player.targetAngle = Math.atan2(dy, dx);
                                 const angle = Math.atan2(dy, dx);
@@ -2343,7 +2416,7 @@
                                 self.mouse.x = self.canvas.width / 2 + Math.cos(angle) * distance;
                                 self.mouse.y = self.canvas.height / 2 + Math.sin(angle) * distance;
                             }
-                            
+
                             if (actionType === 'attack') {
                                 // 检查普攻冷却
                                 const now = Date.now();
@@ -2355,14 +2428,14 @@
                             } else if (actionNum !== null) {
                                 self.player.useSkill(actionNum);
                             }
-                            
+
                             setTimeout(() => {
                                 if (self.player) {
                                     self.player.targetAngle = undefined;
                                 }
                             }, 100);
                         }
-                        
+
                         currentPointerId = null;
                     };
                     
@@ -2469,6 +2542,24 @@
                 // 其他技能使用普通处理
                 createSmallJoystick(skill2Btn, 'skill', 2);
                 createSmallJoystick(skill3Btn, 'skill', 3);
+
+                // 李信变身按钮（点击切换形态，与右键/F键共用 switchLixinForm）
+                const morphBtn = document.getElementById('morphBtn');
+                if (morphBtn) {
+                    // 仅李信显示变身按钮
+                    if (self.player && self.player.heroType === 'lixin') {
+                        morphBtn.classList.remove('hidden');
+                        self.updateMorphBtnDisplay();
+                    } else {
+                        morphBtn.classList.add('hidden');
+                    }
+                    morphBtn.addEventListener('pointerdown', (e) => {
+                        e.preventDefault();
+                        if (self.player && self.isRunning && self.player.heroType === 'lixin') {
+                            self.switchLixinForm();
+                        }
+                    });
+                }
             }
             
             // 检测是否为移动端
@@ -3104,6 +3195,17 @@
                     // 初始化移动方向
                     this.player.moveX = 0;
                     this.player.moveY = 0;
+
+                    // 李信变身按钮显示控制（仅李信显示，其他英雄隐藏）
+                    const morphBtn = document.getElementById('morphBtn');
+                    if (morphBtn) {
+                        if (this.player.heroType === 'lixin') {
+                            morphBtn.classList.remove('hidden');
+                            this.updateMorphBtnDisplay();
+                        } else {
+                            morphBtn.classList.add('hidden');
+                        }
+                    }
                     
                     // 创建障碍物
                     this.createObstacles();
@@ -23774,13 +23876,18 @@
             const skins = SKIN_DATA[heroName] || [{ id: 'classic', name: '原皮', desc: '', colors: ['#888'] }];
             const ui = document.createElement('div');
             ui.id = 'skinSelectionUI';
-            ui.className = 'fixed inset-0 z-[60] flex items-center justify-center p-8';
+            ui.className = 'fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-8 overflow-y-auto';
             ui.style.background = 'radial-gradient(circle at 50% 50%, rgba(10,14,31,.85), rgba(0,0,0,.96))';
+            ui.style.zIndex = '70';
+
+            // 隐藏下层的选英雄界面，避免遮挡（双保险，防止 z-index 失效）
+            const heroUI = document.getElementById('heroSelectionUI');
+            if (heroUI) heroUI.style.display = 'none';
 
             const heroTitle = heroName === 'machao' ? '马超' : (heroName === 'dijieren' ? '狄仁杰' : (heroName === 'qiuzebo' ? '邱泽博' : (heroName === 'lixin' ? '李信' : '英雄')));
 
             ui.innerHTML = `
-                <div class="gt-panel p-10 max-w-3xl w-full relative" style="border-color:rgba(245,210,122,.55); box-shadow: inset 0 1px 0 rgba(245,210,122,.2), 0 0 60px rgba(245,210,122,.25), 0 0 0 1px rgba(0,0,0,.5);">
+                <div class="gt-panel p-6 sm:p-10 max-w-3xl w-full relative" style="border-color:rgba(245,210,122,.55); box-shadow: inset 0 1px 0 rgba(245,210,122,.2), 0 0 60px rgba(245,210,122,.25), 0 0 0 1px rgba(0,0,0,.5); max-height:100%; min-height:0; overflow-y:auto;">
                     <div class="text-center mb-8">
                         <h2 class="text-3xl mb-2" style="font-family:'Cinzel','Noto Serif SC',serif; letter-spacing:.14em; background:linear-gradient(180deg,#fff6d5,#f5d27a 40%,#8a5a16); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; filter:drop-shadow(0 0 14px rgba(245,210,122,.4));">选 择 皮 肤</h2>
                         <p class="text-gray-400 tracking-widest text-sm">${heroTitle} · SKIN SELECTION</p>
@@ -23852,6 +23959,9 @@
             confirmBtn.addEventListener('click', function() {
                 if (!chosen) return;
                 ui.remove();
+                // 兜底：恢复可能被隐藏的选英雄界面（虽然通常会直接进入游戏）
+                const heroUI2 = document.getElementById('heroSelectionUI');
+                if (heroUI2) heroUI2.style.display = '';
                 callback(chosen);
             });
         }
